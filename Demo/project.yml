@@ -1,0 +1,25 @@
+name: SCXDemo
+options:
+  bundleIdPrefix: ai.scx.demo
+  deploymentTarget:
+    iOS: "27.0"
+packages:
+  SCXSwiftKit:
+    path: ..
+targets:
+  SCXDemo:
+    type: application
+    platform: iOS
+    sources: [SCXDemo]
+    dependencies:
+      - package: SCXSwiftKit
+        product: SCXSwiftKit
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_UIApplicationSceneManifest_Generation: YES
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_CFBundleDisplayName: SCX Demo
+        CODE_SIGNING_ALLOWED: NO
+        SWIFT_VERSION: "6.0"
+        TARGETED_DEVICE_FAMILY: "1,2"
