@@ -36,7 +36,7 @@ let answer = try await session.respond(to: "What does APRA do?")
 Needs Xcode 27. In your app project:
 
 1. **File** > **Add Package Dependencies**
-2. Paste `https://github.com/SouthernCrossAI/scx-swift-kit` into the search field
+2. Paste `https://github.com/SouthernCrossAI/SCXSwiftKit` into the search field
 3. Leave the dependency rule on **Up to Next Major Version**, starting from `1.0.0`
 4. **Add Package**
 5. Add the **SCXSwiftKit** product to your app target
@@ -52,11 +52,11 @@ To depend on it from another Swift package, add it to `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/SouthernCrossAI/scx-swift-kit", from: "1.0.0"),
+    .package(url: "https://github.com/SouthernCrossAI/SCXSwiftKit", from: "1.0.0"),
 ],
 targets: [
     .target(name: "YourTarget", dependencies: [
-        .product(name: "SCXSwiftKit", package: "scx-swift-kit"),
+        .product(name: "SCXSwiftKit", package: "SCXSwiftKit"),
     ]),
 ]
 ```
