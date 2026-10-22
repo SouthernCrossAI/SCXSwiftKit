@@ -93,8 +93,9 @@ public struct SCXExecutor: LanguageModelExecutor {
                 resetDate: error.retryAfter.map { Date(timeIntervalSinceNow: $0) },
                 debugDescription: error.message))
         } catch let error as SCXError where (error.status == 400 && error.param == "messages") || error.status == 413 {
-            // 400/messages: "The request is too long for the largest available deployment of this
-            // model." 413: body over the endpoint size cap. Both are an oversized request.
+            // 400/messages: currently "The request exceeds the model's context window. Reduce the
+            // input or lower max_tokens." SCX rewords it, so the guard reads the status and the
+            // param. 413: body over the endpoint size cap. Both are an oversized request.
             // ponytail: token counts are not in the error, 0s until SCX exposes them.
             throw LanguageModelError.contextSizeExceeded(.init(
                 contextSize: 0, tokenCount: 0, debugDescription: error.message))

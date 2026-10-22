@@ -169,11 +169,13 @@ struct WeatherTool: Tool {
     do {
         _ = try await session.respond(to: oversized)
         Issue.record("Expected a context size error")
-    } catch {
-        let description = String(describing: error)
-        #expect(description.localizedCaseInsensitiveContains("too long")
-            || description.localizedCaseInsensitiveContains("exceededContextWindowSize")
-            || description.localizedCaseInsensitiveContains("contextSize"))
+    } catch let error as LanguageModelError {
+        // Match the case, not the wording. SCX rewords this message from time to time and the
+        // provider text reaches the error only as its debug description.
+        guard case .contextSizeExceeded = error else {
+            Issue.record("Expected contextSizeExceeded, got \(error)")
+            return
+        }
     }
 }
 
