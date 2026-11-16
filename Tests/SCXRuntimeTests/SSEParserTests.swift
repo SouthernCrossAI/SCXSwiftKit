@@ -29,3 +29,32 @@ import Testing
         #expect(chunk == nil, "\(ignored) should be ignored")
     }
 }
+
+@Test func textMessageStaysAStringAndPartsBecomeAnArray() throws {
+    func encoded(_ message: ChatMessage) throws -> [String: Any] {
+        try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(message)) as? [String: Any])
+    }
+    #expect(try encoded(ChatMessage(role: "user", content: "hi"))["content"] as? String == "hi")
+
+    let message = try encoded(ChatMessage(role: "user", parts: [
+        .text("Describe"),
+        .image(Data([1, 2, 3]), mediaType: "image/png"),
+        .video(Data([4, 5, 6]), mediaType: "video/mp4"),
+    ]))
+    let parts = try #require(message["content"] as? [[String: Any]])
+    #expect(parts[0]["type"] as? String == "text")
+    #expect(parts[0]["text"] as? String == "Describe")
+    #expect(parts[1]["type"] as? String == "image_url")
+    #expect((parts[1]["image_url"] as? [String: String])?["url"] == "data:image/png;base64,AQID")
+    #expect(parts[2]["type"] as? String == "video_url")
+    #expect((parts[2]["video_url"] as? [String: String])?["url"] == "data:video/mp4;base64,BAUG")
+}
+
+@Test func attachmentByteCountAddsImagesAndVideoOnly() {
+    var chat = ChatRequest(model: "m", messages: [ChatMessage(role: "user", content: "hi")])
+    #expect(chat.attachmentByteCount == 0)
+    chat.messages.append(ChatMessage(role: "user", parts: [
+        .text("x"), .image(Data(count: 3), mediaType: "image/jpeg"), .video(Data(count: 4), mediaType: "video/mp4"),
+    ]))
+    #expect(chat.attachmentByteCount == 7)
+}

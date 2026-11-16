@@ -4,6 +4,7 @@
 import Foundation
 import FoundationModels
 import SCXRuntime
+import UniformTypeIdentifiers
 
 /// An SCX.ai hosted model (MAGPiE or any model id from `/v1/models`) for `LanguageModelSession`.
 ///
@@ -23,6 +24,14 @@ public struct SCXLanguageModel: LanguageModel {
     /// Seconds the stream may stay silent between deltas. Deep reasoning can pause well past
     /// URLSession's 60 s default before the first token, so the default here is generous.
     public var timeout: TimeInterval
+    /// Whether the model takes MP4 input. `load` reads this from SCX's `/v1/models`.
+    public var acceptsVideo = false
+    /// Largest single image the package will send, in bytes. Larger images are refused before any
+    /// upload. 20 MB is SCX's limit for images.
+    public var maximumImageBytes = 20_000_000
+    /// Largest single video the package will send, in bytes. Larger videos are refused before any
+    /// upload. 300 KB is SCX's limit for video for now. Raise it for a model that takes more.
+    public var maximumVideoBytes = 300_000
 
     public init(
         model: String = "MAGPiE",
@@ -50,16 +59,27 @@ public struct SCXLanguageModel: LanguageModel {
         if info.supportedFeatures.contains("json_mode") { capabilities.append(.guidedGeneration) }
         if info.supportedFeatures.contains("reasoning") { capabilities.append(.reasoning) }
         if info.inputModalities.contains("image") { capabilities.append(.vision) }
-        return SCXLanguageModel(model: model, apiKey: apiKey, baseURL: baseURL, capabilities: LanguageModelCapabilities(capabilities))
+        var loaded = SCXLanguageModel(model: model, apiKey: apiKey, baseURL: baseURL, capabilities: LanguageModelCapabilities(capabilities))
+        loaded.acceptsVideo = info.inputModalities.contains("video")
+        return loaded
     }
 
-    /// The catalogue also lists image, video, audio, embedding and moderation models. They appear
-    /// in `/v1/models` but answer `/chat/completions` with 400 "Unsupported model", so reject them
-    /// here instead of at the first prompt. The test is on modalities rather than
-    /// `supported_features`, so a future chat model still loads.
+    #if canImport(FoundationModels, _version: 2.1)
+    /// Apple's capability list has no video case. This is how a model declares it, and the
+    /// framework checks it before a data attachment reaches the executor.
+    @available(iOS 27.2, macOS 27.2, visionOS 27.2, watchOS 27.2, *)
+    public nonisolated(nonsending) func supportsDataAttachmentType(_ type: UTType) async throws -> Bool {
+        acceptsVideo && type.conforms(to: .mpeg4Movie)
+    }
+    #endif
+
+    /// The catalogue also lists image, video, audio, embedding, moderation and System One decision
+    /// models. They appear in `/v1/models` but answer `/chat/completions` with 400 "Unsupported
+    /// model", so reject them here instead of at the first prompt. The test is on modalities
+    /// rather than `supported_features`, so a future chat model still loads.
     static func requireTextGeneration(_ info: ModelInfo) throws {
         guard info.inputModalities.contains("text"), info.outputModalities.contains("text"),
-              !info.supportedFeatures.contains("moderation") else {
+              !info.supportedFeatures.contains("moderation"), !info.supportedFeatures.contains("systemone") else {
             let features = info.supportedFeatures.isEmpty ? "none" : info.supportedFeatures.joined(separator: ", ")
             throw SCXError(
                 status: 400, type: "invalid_request_error",

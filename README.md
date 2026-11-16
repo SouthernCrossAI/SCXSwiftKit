@@ -8,7 +8,7 @@ with MAGPiE served from Australia.
 import FoundationModels
 import SCXSwiftKit
 
-let model = SCXLanguageModel(model: "MAGPiE", apiKey: key)
+let model = try await SCXLanguageModel.load(model: "MAGPiE", apiKey: key)
 // before: let session = LanguageModelSession()
 let session = LanguageModelSession(model: model)
 let answer = try await session.respond(to: "What does APRA do?")
@@ -71,7 +71,8 @@ targets: [
 | Reasoning levels | Yes, `light` / `moderate` / `deep` map to SCX's `low` / `medium` / `high` |
 | Token usage (prompt, completion, cached, reasoning) | Yes |
 | Any SCX text model | Yes, resolved at runtime from `/v1/models` |
-| Image input (vision) | No |
+| Image input (vision) | Yes, on models SCX lists with image input. Sent as JPEG or PNG, up to 20 MB |
+| Video input | Yes, MP4 up to 300 KB, on models SCX lists with video input. Needs iOS 27.2 and Xcode 27.2 |
 | Reproducible output (`seed`) | Sent, but not supported by SCX; do not rely on it |
 | Device attestation (App Attest) | No. Needs a verification endpoint on SCX's side |
 
@@ -128,11 +129,43 @@ in the session transcript as usual. Leave `GenerationOptions.maximumResponseToke
 reasoning models, or set it well above the expected reasoning length: SCX counts reasoning
 tokens against `max_tokens` and emits them first, so a tight cap returns an empty answer.
 
+**Images and video**: attach them with Apple's `Attachment`. Create the model with `load`, which
+reads what the model accepts from `/v1/models`:
+
+```swift
+let model = try await SCXLanguageModel.load(model: "GLM-5.3-Flash", apiKey: key)
+let answer = try await LanguageModelSession(model: model).respond {
+    "What is in this photo?"
+    Attachment(cgImage) // or Attachment(imageURL: fileURL)
+}
+```
+
+Video needs iOS 27.2, the release where Apple added data attachments:
+
+```swift
+let model = try await SCXLanguageModel.load(model: "Kimi-K3.1-Pro", apiKey: key)
+let answer = try await LanguageModelSession(model: model).respond {
+    "What happens in this clip?"
+    Attachment(SCXVideo(mp4: data))
+}
+```
+
+An image above `maximumImageBytes` (20 MB by default) or a video above `maximumVideoBytes` (300 KB
+by default) is refused before any upload, with `LanguageModelError.unsupportedTranscriptContent`.
+300 KB is SCX's video limit for now, and a phone records more than that in one second, so export
+clips at a small size first. The demo app does this with `AVAssetExportSession`: it keeps the first
+15 seconds of the picture, drops the sound and sets `fileLengthLimit` to 270 KB, because that limit
+is only a target for the encoder. SCX can also refuse a smaller file, and that reaches the app as
+the same error with the size and SCX's message in its description. Each turn sends the attachments
+of the whole conversation again, so large files are uploaded on every turn. The live tests of video
+through the session need iOS 27.2 and skip on older systems.
+
 **Timeouts**: deep reasoning can stay silent for minutes before the first token;
 the allowed silence between deltas is configurable: `SCXLanguageModel(model:apiKey:timeout:)`,
-default 300 seconds.
+or set `timeout` on the model that `load` returns. The default is 300 seconds.
 
-**Errors**: rate limits and overload map to `LanguageModelError.rateLimited` (with the
+**Errors**: rate limits, overload and a temporarily unavailable upstream map to
+`LanguageModelError.rateLimited` (with the
 retry date when SCX sends one), oversized requests to `.contextSizeExceeded`, guardrail
 filtering to `.guardrailViolation`, network timeouts to `.timeout`. Other
 connectivity failures (offline, connection lost mid-stream) surface as `URLError`, since
@@ -155,9 +188,9 @@ it, and when the id belongs to one of SCX's image, video, audio, embedding or mo
 models, which share the catalogue but cannot serve chat.
 
 Where a model runs matters for data residency. MAGPiE is served from Australia; the catalogue
-also carries models hosted in the United States, Germany and Singapore. Each entry from
-`SCXClient(apiKey:).models()` lists its `regions` as country codes, so an app that must keep
-data in Australia can check before it sends a prompt.
+also carries models hosted in the United States, Germany and Singapore. SCX's models page lists
+the regions of each model. `SCXClient(apiKey:).models()` gives them as `regions` country codes
+when `/v1/models` includes them, and the list is empty when it does not.
 
 ## API key handling
 
@@ -181,9 +214,26 @@ command line streaming demo: `swift run scx-chat --model MAGPiE "G'day"`, or
 
 ## Demo
 
-`Demo/` is a SwiftUI app for the iOS 27 simulator with a model picker, streamed answers and
-the model's reasoning. Generate the project with `cd Demo && xcodegen generate`, build for an
-iOS 27 simulator, and paste an API key into the app.
+`Demo/` is a SwiftUI app for iOS 27 with a model picker, streamed answers, the model's reasoning
+and an image or video from the photo library. Generate the project with
+`cd Demo && xcodegen generate`, build for an iOS 27 simulator, and paste an API key into the app.
+
+Images work on the simulator. Video needs iOS 27.2, and the app converts each video to a small MP4
+before sending it, which the iOS 27.0 simulator cannot do. The conversion keeps the first 15
+seconds of the picture at a low quality and drops the sound, so it fits in 300 KB. Test video on a
+real iPhone. The phone needs Developer Mode on, and Xcode needs your Apple account:
+
+```sh
+cd Demo && xcodegen generate
+xcodebuild build -project SCXDemo.xcodeproj -scheme SCXDemo \
+  -destination 'id=<device id>' -derivedDataPath build -allowProvisioningUpdates \
+  DEVELOPMENT_TEAM=<team id> CODE_SIGN_STYLE=Automatic CODE_SIGNING_ALLOWED=YES \
+  CODE_SIGN_IDENTITY="Apple Development" PRODUCT_BUNDLE_IDENTIFIER=<your bundle id>
+xcrun devicectl device install app --device <device id> \
+  build/Build/Products/Debug-iphoneos/SCXDemo.app
+```
+
+`xcrun devicectl list devices` shows the device id.
 
 ![Demo app streaming MAGPiE](Demo/screenshot.png)
 

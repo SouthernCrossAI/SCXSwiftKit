@@ -39,7 +39,9 @@ public struct SCXClient: Sendable {
                 do {
                     var chat = chat
                     chat.stream = true
-                    let body = try JSONEncoder().encode(chat)
+                    let encoder = JSONEncoder()
+                    encoder.outputFormatting = .withoutEscapingSlashes // base64 is full of slashes
+                    let body = try encoder.encode(chat)
                     let (bytes, response) = try await session.bytes(for: request(path: "chat/completions", body: body))
                     if let http = response as? HTTPURLResponse, !(200..<300).contains(http.statusCode) {
                         var data = Data()

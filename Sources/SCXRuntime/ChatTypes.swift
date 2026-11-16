@@ -5,6 +5,8 @@ import Foundation
 public struct ChatMessage: Codable, Sendable {
     public var role: String
     public var content: String?
+    /// Text plus images or video. When set, it goes out as `content` in place of the string above.
+    public var parts: [ContentPart]?
     public var toolCalls: [ToolCall]?
     public var toolCallID: String?
 
@@ -14,11 +16,55 @@ public struct ChatMessage: Codable, Sendable {
         case toolCallID = "tool_call_id"
     }
 
-    public init(role: String, content: String? = nil, toolCalls: [ToolCall]? = nil, toolCallID: String? = nil) {
+    public init(role: String, content: String? = nil, toolCalls: [ToolCall]? = nil, toolCallID: String? = nil,
+                parts: [ContentPart]? = nil) {
         self.role = role
         self.content = content
         self.toolCalls = toolCalls
         self.toolCallID = toolCallID
+        self.parts = parts
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(role, forKey: .role)
+        if let parts {
+            try c.encode(parts, forKey: .content)
+        } else {
+            try c.encodeIfPresent(content, forKey: .content)
+        }
+        try c.encodeIfPresent(toolCalls, forKey: .toolCalls)
+        try c.encodeIfPresent(toolCallID, forKey: .toolCallID)
+    }
+}
+
+/// One piece of a multimodal user message. Images and video travel inline as base64 data URLs,
+/// the only form every vision model accepts (see docs/PROVIDER-NOTES.md).
+public enum ContentPart: Encodable, Sendable {
+    case text(String)
+    case image(Data, mediaType: String)
+    case video(Data, mediaType: String)
+
+    /// Size of the image or video before base64, 0 for text.
+    public var byteCount: Int {
+        switch self {
+        case .text: 0
+        case .image(let data, _), .video(let data, _): data.count
+        }
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        let part: JSONValue
+        switch self {
+        case .text(let text): part = .object(["type": .string("text"), "text": .string(text)])
+        case .image(let data, let mediaType): part = Self.dataURL("image_url", data, mediaType)
+        case .video(let data, let mediaType): part = Self.dataURL("video_url", data, mediaType)
+        }
+        try part.encode(to: encoder)
+    }
+
+    private static func dataURL(_ type: String, _ data: Data, _ mediaType: String) -> JSONValue {
+        .object(["type": .string(type), type: .object(["url": .string("data:\(mediaType);base64,\(data.base64EncodedString())")])])
     }
 }
 
@@ -72,6 +118,11 @@ public struct ChatRequest: Encodable, Sendable {
     public init(model: String, messages: [ChatMessage]) {
         self.model = model
         self.messages = messages
+    }
+
+    /// Total size of the images and video in this request, before base64.
+    public var attachmentByteCount: Int {
+        messages.flatMap { $0.parts ?? [] }.reduce(0) { $0 + $1.byteCount }
     }
 }
 
