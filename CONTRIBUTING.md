@@ -17,6 +17,7 @@ mapped an SCX response to the wrong Apple error, say which case you expected and
   SDK, and it compiles out on older toolchains. If Xcode 27 is not your selected toolchain,
   point `DEVELOPER_DIR` at it when you build or test.
 - The iOS 27.0 simulator runtime, with at least one iPhone simulator on it.
+  The video tests through Apple's API need the iOS 27.2 runtime and skip without it.
 - An SCX API key with credit, in `~/.config/scx/api_key` or in `SCX_API_KEY`. The live tests
   spend a few cents per run.
 - `xcodegen` (Homebrew) if you work on the demo app. `Demo/SCXDemo.xcodeproj` is generated
@@ -34,7 +35,7 @@ pull request. It watches the log for the Swift Testing summary line and stops `x
 once it appears, because some toolchains hang after the tests finish, and it fails the run if
 that summary never appears, so a hung test cannot pass by silence.
 
-The seven live tests skip when no key is present, so the suite still runs without one, but
+The live tests skip when no key is present, so the suite still runs without one, but
 only the mapping tests then prove anything.
 
 To run the simulator suite by hand without the watchdog:
